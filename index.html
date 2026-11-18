@@ -1,0 +1,1777 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VectorForge — Paste & Convert Images to SVG</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    /* Checkerboard transparency grid for light & dark themes */
+    .checkerboard {
+      background-color: #f8fafc;
+      background-image: 
+        linear-gradient(45deg, #e2e8f0 25%, transparent 25%), 
+        linear-gradient(-45deg, #e2e8f0 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #e2e8f0 75%), 
+        linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    }
+    .dark .checkerboard {
+      background-color: #0f172a;
+      background-image: 
+        linear-gradient(45deg, #1e293b 25%, transparent 25%), 
+        linear-gradient(-45deg, #1e293b 25%, transparent 25%), 
+        linear-gradient(45deg, transparent 75%, #1e293b 75%), 
+        linear-gradient(-45deg, transparent 75%, #1e293b 75%);
+    }
+
+    /* Wireframe mode for SVG path inspection */
+    .wireframe-mode svg path,
+    .wireframe-mode svg rect,
+    .wireframe-mode svg polygon {
+      fill: rgba(99, 102, 241, 0.08) !important;
+      stroke: #6366f1 !important;
+      stroke-width: 1.25px !important;
+      vector-effect: non-scaling-stroke;
+    }
+    .dark .wireframe-mode svg path,
+    .dark .wireframe-mode svg rect,
+    .dark .wireframe-mode svg polygon {
+      fill: rgba(129, 140, 248, 0.12) !important;
+      stroke: #818cf8 !important;
+    }
+
+    /* Custom range sliders */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 999px;
+      background: #cbd5e1;
+      outline: none;
+    }
+    .dark input[type="range"] {
+      background: #334155;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #6366f1;
+      cursor: pointer;
+      border: 2px solid #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      transition: transform 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.4);
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.65);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-brand-500 selection:text-white transition-colors duration-200">
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-30">
+    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+      <!-- Brand Logo -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center shadow-sm shadow-brand-500/25">
+          <svg class="w-4.5 h-4.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+            <path d="M2 2l7.586 7.586"/>
+            <circle cx="11" cy="11" r="2"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-bold text-base tracking-tight">VectorForge</h1>
+            <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20">Pure JS Engine</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center Quick Actions -->
+      <div class="flex items-center gap-2">
+        <button id="btnPasteTrigger" type="button" title="Paste image from clipboard (Ctrl+V)" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition">
+          <svg class="w-3.5 h-3.5 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span>Paste</span>
+          <kbd class="hidden md:inline-block ml-1 px-1.5 py-0.2 text-[10px] font-mono bg-white dark:bg-slate-900 rounded border border-slate-300 dark:border-slate-600">Ctrl+V</kbd>
+        </button>
+
+        <label for="fileInput" class="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition">
+          <svg class="w-3.5 h-3.5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>Upload</span>
+        </label>
+        <input id="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" class="hidden" />
+
+        <button id="btnLoadSample" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition">
+          <svg class="w-3.5 h-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span class="hidden sm:inline">Sample</span>
+        </button>
+      </div>
+
+      <!-- Right Actions: Storage badge & Theme Toggle -->
+      <div class="flex items-center gap-2">
+        <span id="storageBadge" title="Settings persistence backend" class="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono bg-slate-100 dark:bg-slate-800/80 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700/80">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          <span id="storageLabel">localStorage</span>
+        </span>
+
+        <button id="btnThemeToggle" type="button" aria-label="Toggle theme" class="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition">
+          <!-- Sun icon (shown in dark mode) -->
+          <svg id="iconSun" class="w-4 h-4 hidden dark:block" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <!-- Moon icon (shown in light mode) -->
+          <svg id="iconMoon" class="w-4 h-4 block dark:hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+    <!-- Left Sidebar: Vectorization Controls -->
+    <aside class="lg:col-span-4 xl:col-span-3 flex flex-col gap-4">
+      
+      <!-- Settings Card -->
+      <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5 flex flex-col gap-5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold tracking-tight flex items-center gap-2">
+            <svg class="w-4 h-4 text-brand-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+            Vectorization Engine
+          </h2>
+          <button id="btnResetSettings" type="button" class="text-xs text-slate-500 hover:text-brand-500 dark:text-slate-400 dark:hover:text-brand-400 transition">Reset</button>
+        </div>
+
+        <!-- Tracing Mode Selector -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-medium text-slate-600 dark:text-slate-400">Tracing Algorithm</label>
+          <div class="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80">
+            <button id="modeContour" type="button" data-mode="contour" class="mode-btn py-2 px-2.5 rounded-md text-xs font-medium flex flex-col items-center gap-1 transition bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-sm">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17c3.333-3.333 6.667-5 10-5 3.333 0 6.667-1.667 8-5"/><circle cx="3" cy="17" r="2"/><circle cx="21" cy="7" r="2"/></svg>
+              <span>Smooth Paths</span>
+            </button>
+            <button id="modePixel" type="button" data-mode="pixel" class="mode-btn py-2 px-2.5 rounded-md text-xs font-medium flex flex-col items-center gap-1 transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+              <span>Crisp Blocks</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Color Count Slider -->
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <label for="sliderColors" class="text-xs font-medium text-slate-700 dark:text-slate-300">Palette Colors</label>
+            <span id="valColors" class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-brand-500/10 text-brand-600 dark:text-brand-400">8</span>
+          </div>
+          <input id="sliderColors" type="range" min="2" max="24" value="8" class="w-full" />
+          <div id="paletteSwatches" class="flex flex-wrap gap-1 pt-0.5 min-h-[16px]"></div>
+        </div>
+
+        <!-- Path Simplification / Smoothing Slider -->
+        <div id="groupSmoothness" class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <label for="sliderSmooth" class="text-xs font-medium text-slate-700 dark:text-slate-300">Path Simplification</label>
+            <span id="valSmooth" class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">1.5 px</span>
+          </div>
+          <input id="sliderSmooth" type="range" min="0" max="6" step="0.25" value="1.5" class="w-full" />
+          <p class="text-[11px] text-slate-500 dark:text-slate-400">Higher values produce cleaner curves with fewer SVG nodes.</p>
+        </div>
+
+        <!-- Curve Smoothing Toggle -->
+        <div id="groupCurves" class="flex items-center justify-between py-1">
+          <div>
+            <span class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Quadratic Bezier Curves</span>
+            <span class="text-[11px] text-slate-500 dark:text-slate-400">Round sharp polygon corners</span>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input id="checkCurves" type="checkbox" checked class="sr-only peer" />
+            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-600"></div>
+          </label>
+        </div>
+
+        <!-- Noise Filter / Min Area Slider -->
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <label for="sliderNoise" class="text-xs font-medium text-slate-700 dark:text-slate-300">Despeckle Filter (Min Area)</label>
+            <span id="valNoise" class="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">4 px</span>
+          </div>
+          <input id="sliderNoise" type="range" min="0" max="64" step="1" value="4" class="w-full" />
+        </div>
+
+        <!-- Auto-Remove Background Toggle -->
+        <div class="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div>
+            <span class="text-xs font-medium text-slate-700 dark:text-slate-300 block">Remove Outer Background</span>
+            <span class="text-[11px] text-slate-500 dark:text-slate-400">Auto-detect corner backdrop color</span>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input id="checkRemoveBg" type="checkbox" class="sr-only peer" />
+            <div class="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-600"></div>
+          </label>
+        </div>
+
+        <!-- Max Processing Resolution -->
+        <div class="flex flex-col gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div class="flex items-center justify-between">
+            <label for="selectMaxDim" class="text-xs font-medium text-slate-700 dark:text-slate-300">Trace Detail Resolution</label>
+            <select id="selectMaxDim" class="text-xs font-mono bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md px-2 py-1 text-slate-700 dark:text-slate-200 focus:outline-none focus:border-brand-500">
+              <option value="128">128px (Fast / Pixel)</option>
+              <option value="256">256px (Balanced)</option>
+              <option value="400" selected>400px (High Detail)</option>
+              <option value="640">640px (Ultra)</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Export & Output Card -->
+      <section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 sm:p-5 flex flex-col gap-3">
+        <h2 class="text-sm font-semibold tracking-tight flex items-center gap-2">
+          <svg class="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export Vector
+        </h2>
+
+        <div class="grid grid-cols-2 gap-2.5">
+          <button id="btnDownloadSvg" type="button" disabled class="col-span-2 py-2.5 px-4 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:pointer-events-none text-white shadow-sm shadow-brand-600/20 flex items-center justify-center gap-2 transition">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download .SVG
+          </button>
+
+          <button id="btnCopySvg" type="button" disabled class="py-2 px-3 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy SVG Code
+          </button>
+
+          <button id="btnToggleCode" type="button" disabled class="py-2 px-3 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-40 disabled:pointer-events-none text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+            View Code
+          </button>
+        </div>
+
+        <!-- Recent History Strip -->
+        <div id="historySection" class="hidden pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-medium text-slate-500 dark:text-slate-400">Recent Conversions</span>
+            <button id="btnClearHistory" type="button" class="text-[11px] text-slate-400 hover:text-rose-500 transition">Clear</button>
+          </div>
+          <div id="historyList" class="grid grid-cols-4 gap-2"></div>
+        </div>
+      </section>
+    </aside>
+
+    <!-- Right Main Stage: Preview & Inspection -->
+    <section class="lg:col-span-8 xl:col-span-9 flex flex-col gap-4 min-h-[540px]">
+
+      <!-- Stage Toolbar -->
+      <div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+        
+        <!-- View Mode Tabs -->
+        <div class="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+          <button id="viewSplit" type="button" data-view="split" class="view-tab px-2.5 py-1 rounded-md text-xs font-medium bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm transition">Split View</button>
+          <button id="viewVector" type="button" data-view="vector" class="view-tab px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">SVG Only</button>
+          <button id="viewOriginal" type="button" data-view="original" class="view-tab px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition">Original</button>
+        </div>
+
+        <!-- Live Stats Badges -->
+        <div id="statsBar" class="hidden sm:flex items-center gap-2 text-[11px] font-mono text-slate-600 dark:text-slate-400">
+          <span id="statDim" class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">— × —</span>
+          <span id="statNodes" class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">0 paths</span>
+          <span id="statSize" class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold">0 KB</span>
+        </div>
+
+        <!-- Inspection & Zoom Controls -->
+        <div class="flex items-center gap-1.5">
+          <button id="btnWireframe" type="button" title="Toggle Vector Wireframe Outlines" class="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            <span class="hidden md:inline">Wireframe</span>
+          </button>
+
+          <button id="btnGridToggle" type="button" title="Toggle Transparency Checkerboard" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-brand-500/10 border border-brand-500/30 text-brand-600 dark:text-brand-400 flex items-center gap-1.5 transition">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+          </button>
+
+          <div class="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+            <button id="btnZoomOut" type="button" title="Zoom Out" class="px-2 py-1 text-xs font-bold hover:text-brand-500 transition">−</button>
+            <span id="zoomLabel" class="px-1.5 text-[11px] font-mono min-w-[44px] text-center">100%</span>
+            <button id="btnZoomIn" type="button" title="Zoom In" class="px-2 py-1 text-xs font-bold hover:text-brand-500 transition">+</button>
+            <button id="btnZoomReset" type="button" title="Reset Zoom & Pan" class="px-2 py-1 text-[11px] border-l border-slate-200 dark:border-slate-700 hover:text-brand-500 transition">Fit</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Canvas / Drop & Paste Stage -->
+      <div id="stageContainer" class="relative flex-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col min-h-[460px]">
+
+        <!-- Empty State / Paste & Drop Zone -->
+        <div id="emptyState" class="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 text-center transition-colors">
+          <div id="dropCard" class="max-w-md w-full rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-500 dark:hover:border-brand-500 bg-slate-50/60 dark:bg-slate-800/30 p-8 flex flex-col items-center gap-4 transition-all">
+            <div class="w-14 h-14 rounded-2xl bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center">
+              <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </div>
+            <div class="space-y-1.5">
+              <h3 class="text-base font-semibold text-slate-900 dark:text-white">Paste an image anywhere on this page</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                Press <kbd class="px-1.5 py-0.5 font-mono text-[11px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded">Ctrl + V</kbd> or <kbd class="px-1.5 py-0.5 font-mono text-[11px] bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded">⌘ + V</kbd> to paste from clipboard, drag & drop a PNG/JPG/WebP file, or click below.
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+              <label for="fileInput" class="cursor-pointer px-4 py-2 rounded-lg text-xs font-semibold bg-brand-600 hover:bg-brand-500 text-white shadow-sm transition">
+                Choose Image File
+              </label>
+              <button id="btnSampleEmpty" type="button" class="px-4 py-2 rounded-lg text-xs font-medium bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition">
+                Try Sample Graphic
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Comparison Viewport (Hidden until image loaded) -->
+        <div id="previewWorkspace" class="hidden flex-1 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200 dark:divide-slate-800 overflow-hidden">
+          
+          <!-- Original Raster Pane -->
+          <div id="paneOriginal" class="relative flex flex-col overflow-hidden checkerboard">
+            <div class="absolute top-3 left-3 z-10 px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-900/75 text-white backdrop-blur-sm pointer-events-none">
+              Original Raster
+            </div>
+            <div id="originalViewport" class="flex-1 flex items-center justify-center p-6 overflow-hidden cursor-grab active:cursor-grabbing select-none">
+              <img id="originalPreviewImg" alt="Original raster input" class="max-w-full max-h-full object-contain pointer-events-none transition-transform duration-75" style="image-rendering: auto;" />
+            </div>
+          </div>
+
+          <!-- Generated SVG Pane -->
+          <div id="paneVector" class="relative flex flex-col overflow-hidden checkerboard">
+            <div class="absolute top-3 left-3 z-10 px-2.5 py-1 rounded-md text-[11px] font-medium bg-brand-600/90 text-white backdrop-blur-sm pointer-events-none flex items-center gap-1.5">
+              <span>Vector SVG</span>
+              <span id="processingSpinner" class="hidden w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+            </div>
+            <div id="svgViewport" class="flex-1 flex items-center justify-center p-6 overflow-hidden cursor-grab active:cursor-grabbing select-none">
+              <div id="svgOutputContainer" class="w-full h-full flex items-center justify-center transition-transform duration-75"></div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Drag-over Full Overlay -->
+        <div id="dragOverlay" class="hidden absolute inset-0 z-40 bg-brand-600/15 backdrop-blur-[2px] border-2 border-dashed border-brand-500 rounded-xl flex items-center justify-center pointer-events-none">
+          <div class="bg-white dark:bg-slate-900 px-6 py-4 rounded-xl shadow-xl border border-brand-500/30 text-center">
+            <p class="text-sm font-semibold text-brand-600 dark:text-brand-400">Drop image to vectorize</p>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Supports PNG, JPG, WebP, GIF</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Expandable Raw SVG Code Drawer -->
+      <div id="codeDrawer" class="hidden bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col">
+        <div class="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold">Generated SVG Markup</span>
+            <span class="text-[11px] font-mono text-slate-500 dark:text-slate-400">(Editable — live updates preview)</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="btnFormatCode" type="button" class="text-xs px-2.5 py-1 rounded bg-slate-200/70 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition">Format</button>
+            <button id="btnCloseCode" type="button" class="text-xs px-2 py-1 rounded text-slate-500 hover:text-slate-900 dark:hover:text-white">Close</button>
+          </div>
+        </div>
+        <textarea id="svgCodeEditor" spellcheck="false" class="w-full h-48 p-4 font-mono text-xs bg-slate-950 text-emerald-400 focus:outline-none resize-y leading-relaxed"></textarea>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 translate-y-16 opacity-0 pointer-events-none transition-all duration-300">
+    <div class="bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 rounded-xl shadow-lg border border-slate-700 flex items-center gap-2.5 text-xs font-medium">
+      <span id="toastIcon" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+      <span id="toastMessage">Action completed</span>
+    </div>
+  </div>
+
+  <!-- Hidden working canvas -->
+  <canvas id="workCanvas" class="hidden"></canvas>
+
+  <script>
+    /**
+     * VectorForge — Pure Native JS Raster-to-SVG Vectorizer
+     * -----------------------------------------------------
+     * 1. Storage Adapter (chrome.storage.local with localStorage fallback)
+     * 2. Image Input Pipeline (Clipboard Paste, Drag & Drop, File Picker, Procedural Sample)
+     * 3. Vectorization Engine:
+     *    - K-Means++ Color Quantization
+     *    - Optional Corner Flood-Fill Background Removal
+     *    - Mode A: Marching Squares Contour Extraction + Douglas-Peucker Simplification + Quadratic Bezier Smoothing
+     *    - Mode B: Run-Length Horizontal Merged Pixel Rectangles
+     * 4. Interactive Pan/Zoom Stage, Wireframe Inspection, Code Editor & Export
+     */
+
+    (function () {
+      'use strict';
+
+      // =========================================================================
+      // 1. STORAGE ADAPTER (chrome.storage.local -> localStorage fallback)
+      // =========================================================================
+      const StorageAdapter = (() => {
+        const hasChromeStorage = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
+        const badgeEl = document.getElementById('storageLabel');
+        if (badgeEl) {
+          badgeEl.textContent = hasChromeStorage ? 'chrome.storage.local' : 'localStorage';
+        }
+
+        return {
+          async get(key, defaultValue) {
+            try {
+              if (hasChromeStorage) {
+                return new Promise((resolve) => {
+                  chrome.storage.local.get([key], (res) => {
+                    resolve(res && res[key] !== undefined ? res[key] : defaultValue);
+                  });
+                });
+              }
+              const raw = localStorage.getItem(key);
+              return raw !== null ? JSON.parse(raw) : defaultValue;
+            } catch (e) {
+              return defaultValue;
+            }
+          },
+          async set(key, value) {
+            try {
+              if (hasChromeStorage) {
+                return new Promise((resolve) => {
+                  chrome.storage.local.set({ [key]: value }, resolve);
+                });
+              }
+              localStorage.setItem(key, JSON.stringify(value));
+            } catch (e) {
+              // Ignore quota errors gracefully
+            }
+          }
+        };
+      })();
+
+      // =========================================================================
+      // 2. APPLICATION STATE & DOM REFERENCES
+      // =========================================================================
+      const DEFAULT_SETTINGS = {
+        mode: 'contour',      // 'contour' | 'pixel'
+        colors: 8,            // 2..24
+        smoothness: 1.5,      // 0..6 (Douglas-Peucker epsilon)
+        curves: true,         // Quadratic Bezier smoothing
+        minArea: 4,           // Minimum connected component pixel count
+        removeBg: false,      // Flood-fill outer background removal
+        maxDim: 400,          // Max dimension for processing
+        theme: 'dark'
+      };
+
+      let settings = { ...DEFAULT_SETTINGS };
+      let currentImage = null;       // HTMLImageElement
+      let currentSvgString = '';
+      let historyItems = [];
+      let renderDebounceTimer = null;
+
+      // Zoom & Pan state
+      let transform = { scale: 1, x: 0, y: 0 };
+      let isPanning = false;
+      let panStart = { x: 0, y: 0 };
+      let showCheckerboard = true;
+      let wireframeActive = false;
+      let currentViewMode = 'split'; // 'split' | 'vector' | 'original'
+
+      // DOM Elements
+      const els = {
+        fileInput: document.getElementById('fileInput'),
+        btnPasteTrigger: document.getElementById('btnPasteTrigger'),
+        btnLoadSample: document.getElementById('btnLoadSample'),
+        btnSampleEmpty: document.getElementById('btnSampleEmpty'),
+        btnThemeToggle: document.getElementById('btnThemeToggle'),
+        btnResetSettings: document.getElementById('btnResetSettings'),
+
+        modeButtons: document.querySelectorAll('.mode-btn'),
+        sliderColors: document.getElementById('sliderColors'),
+        valColors: document.getElementById('valColors'),
+        paletteSwatches: document.getElementById('paletteSwatches'),
+
+        groupSmoothness: document.getElementById('groupSmoothness'),
+        sliderSmooth: document.getElementById('sliderSmooth'),
+        valSmooth: document.getElementById('valSmooth'),
+
+        groupCurves: document.getElementById('groupCurves'),
+        checkCurves: document.getElementById('checkCurves'),
+
+        sliderNoise: document.getElementById('sliderNoise'),
+        valNoise: document.getElementById('valNoise'),
+
+        checkRemoveBg: document.getElementById('checkRemoveBg'),
+        selectMaxDim: document.getElementById('selectMaxDim'),
+
+        btnDownloadSvg: document.getElementById('btnDownloadSvg'),
+        btnCopySvg: document.getElementById('btnCopySvg'),
+        btnToggleCode: document.getElementById('btnToggleCode'),
+
+        historySection: document.getElementById('historySection'),
+        historyList: document.getElementById('historyList'),
+        btnClearHistory: document.getElementById('btnClearHistory'),
+
+        viewTabs: document.querySelectorAll('.view-tab'),
+        statsBar: document.getElementById('statsBar'),
+        statDim: document.getElementById('statDim'),
+        statNodes: document.getElementById('statNodes'),
+        statSize: document.getElementById('statSize'),
+
+        btnWireframe: document.getElementById('btnWireframe'),
+        btnGridToggle: document.getElementById('btnGridToggle'),
+        btnZoomOut: document.getElementById('btnZoomOut'),
+        btnZoomIn: document.getElementById('btnZoomIn'),
+        btnZoomReset: document.getElementById('btnZoomReset'),
+        zoomLabel: document.getElementById('zoomLabel'),
+
+        stageContainer: document.getElementById('stageContainer'),
+        emptyState: document.getElementById('emptyState'),
+        previewWorkspace: document.getElementById('previewWorkspace'),
+        paneOriginal: document.getElementById('paneOriginal'),
+        paneVector: document.getElementById('paneVector'),
+        originalViewport: document.getElementById('originalViewport'),
+        svgViewport: document.getElementById('svgViewport'),
+        originalPreviewImg: document.getElementById('originalPreviewImg'),
+        svgOutputContainer: document.getElementById('svgOutputContainer'),
+        processingSpinner: document.getElementById('processingSpinner'),
+        dragOverlay: document.getElementById('dragOverlay'),
+
+        codeDrawer: document.getElementById('codeDrawer'),
+        svgCodeEditor: document.getElementById('svgCodeEditor'),
+        btnFormatCode: document.getElementById('btnFormatCode'),
+        btnCloseCode: document.getElementById('btnCloseCode'),
+
+        toast: document.getElementById('toast'),
+        toastMessage: document.getElementById('toastMessage'),
+        toastIcon: document.getElementById('toastIcon'),
+        workCanvas: document.getElementById('workCanvas')
+      };
+
+      // =========================================================================
+      // 3. UI HELPERS & TOAST NOTIFICATIONS
+      // =========================================================================
+      let toastTimer = null;
+      function showToast(msg, type = 'success') {
+        els.toastMessage.textContent = msg;
+        els.toastIcon.className = 'w-2 h-2 rounded-full ' + (
+          type === 'error' ? 'bg-rose-500' : type === 'info' ? 'bg-brand-400' : 'bg-emerald-400'
+        );
+        els.toast.classList.remove('translate-y-16', 'opacity-0');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          els.toast.classList.add('translate-y-16', 'opacity-0');
+        }, 2600);
+      }
+
+      function applyTheme(theme) {
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
+
+      function syncControlsWithSettings() {
+        els.sliderColors.value = settings.colors;
+        els.valColors.textContent = settings.colors;
+
+        els.sliderSmooth.value = settings.smoothness;
+        els.valSmooth.textContent = `${Number(settings.smoothness).toFixed(2).replace(/\.00$/, '')} px`;
+
+        els.checkCurves.checked = settings.curves;
+
+        els.sliderNoise.value = settings.minArea;
+        els.valNoise.textContent = `${settings.minArea} px`;
+
+        els.checkRemoveBg.checked = settings.removeBg;
+        els.selectMaxDim.value = String(settings.maxDim);
+
+        els.modeButtons.forEach((btn) => {
+          const isSelected = btn.dataset.mode === settings.mode;
+          if (isSelected) {
+            btn.className = 'mode-btn py-2 px-2.5 rounded-md text-xs font-medium flex flex-col items-center gap-1 transition bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-sm';
+          } else {
+            btn.className = 'mode-btn py-2 px-2.5 rounded-md text-xs font-medium flex flex-col items-center gap-1 transition text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200';
+          }
+        });
+
+        // Toggle contour-specific controls
+        const isContour = settings.mode === 'contour';
+        els.groupSmoothness.classList.toggle('opacity-40', !isContour);
+        els.groupSmoothness.classList.toggle('pointer-events-none', !isContour);
+        els.groupCurves.classList.toggle('opacity-40', !isContour);
+        els.groupCurves.classList.toggle('pointer-events-none', !isContour);
+      }
+
+      async function saveSettings() {
+        await StorageAdapter.set('vf_settings_v1', settings);
+      }
+
+      // =========================================================================
+      // 4. IMAGE LOADING (PASTE, DROP, FILE, SAMPLE)
+      // =========================================================================
+      function loadImageFromDataUrl(dataUrl, addToHistory = true) {
+        const img = new Image();
+        img.onload = () => {
+          currentImage = img;
+          els.originalPreviewImg.src = dataUrl;
+          els.emptyState.classList.add('hidden');
+          els.previewWorkspace.classList.remove('hidden');
+          els.statsBar.classList.remove('hidden');
+
+          els.btnDownloadSvg.disabled = false;
+          els.btnCopySvg.disabled = false;
+          els.btnToggleCode.disabled = false;
+
+          resetZoomAndPan();
+          triggerVectorization();
+
+          if (addToHistory) {
+            saveToHistory(dataUrl);
+          }
+        };
+        img.onerror = () => {
+          showToast('Failed to decode image data.', 'error');
+        };
+        img.src = dataUrl;
+      }
+
+      function handleFileObject(file) {
+        if (!file || !file.type.startsWith('image/')) {
+          showToast('Please provide a valid image file (PNG, JPG, WebP).', 'error');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => loadImageFromDataUrl(e.target.result, true);
+        reader.readAsDataURL(file);
+      }
+
+      // Global Paste Listener (Ctrl+V / Cmd+V anywhere)
+      window.addEventListener('paste', (e) => {
+        // Do not hijack paste when typing inside the SVG code editor
+        if (document.activeElement === els.svgCodeEditor) return;
+
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.indexOf('image') !== -1) {
+            e.preventDefault();
+            const blob = items[i].getAsFile();
+            handleFileObject(blob);
+            showToast('Image pasted from clipboard!', 'info');
+            return;
+          }
+        }
+        showToast('No image found in clipboard.', 'error');
+      });
+
+      // Clipboard Read Button (for users clicking the Paste button directly)
+      els.btnPasteTrigger.addEventListener('click', async () => {
+        try {
+          if (navigator.clipboard && navigator.clipboard.read) {
+            const clipboardItems = await navigator.clipboard.read();
+            for (const item of clipboardItems) {
+              const imageType = item.types.find((t) => t.startsWith('image/'));
+              if (imageType) {
+                const blob = await item.getType(imageType);
+                handleFileObject(blob);
+                showToast('Image pasted from clipboard!', 'info');
+                return;
+              }
+            }
+          }
+          showToast('Press Ctrl+V (or Cmd+V) anywhere to paste an image.', 'info');
+        } catch (err) {
+          showToast('Press Ctrl+V (or Cmd+V) on your keyboard to paste.', 'info');
+        }
+      });
+
+      // Drag and Drop support across the entire window
+      let dragCounter = 0;
+      window.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        dragCounter++;
+        els.dragOverlay.classList.remove('hidden');
+      });
+      window.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dragCounter--;
+        if (dragCounter <= 0) {
+          dragCounter = 0;
+          els.dragOverlay.classList.add('hidden');
+        }
+      });
+      window.addEventListener('dragover', (e) => {
+        e.preventDefault();
+      });
+      window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        els.dragOverlay.classList.add('hidden');
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          handleFileObject(e.dataTransfer.files[0]);
+        }
+      });
+
+      els.fileInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleFileObject(e.target.files[0]);
+          e.target.value = '';
+        }
+      });
+
+      // Procedural High-Contrast Sample Emblem Generator
+      function generateSampleImage() {
+        const c = document.createElement('canvas');
+        c.width = 320;
+        c.height = 320;
+        const ctx = c.getContext('2d');
+
+        // Background
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, 320, 320);
+
+        // Outer glowing ring
+        ctx.beginPath();
+        ctx.arc(160, 160, 122, 0, Math.PI * 2);
+        ctx.fillStyle = '#1e293b';
+        ctx.fill();
+        ctx.lineWidth = 10;
+        ctx.strokeStyle = '#6366f1';
+        ctx.stroke();
+
+        // Sunset circle
+        ctx.beginPath();
+        ctx.arc(160, 145, 76, 0, Math.PI * 2);
+        ctx.fillStyle = '#f59e0b';
+        ctx.fill();
+
+        // Inner sun highlight
+        ctx.beginPath();
+        ctx.arc(140, 125, 24, 0, Math.PI * 2);
+        ctx.fillStyle = '#fef3c7';
+        ctx.fill();
+
+        // Stylized mountain peaks
+        ctx.beginPath();
+        ctx.moveTo(64, 215);
+        ctx.lineTo(132, 122);
+        ctx.lineTo(195, 215);
+        ctx.closePath();
+        ctx.fillStyle = '#10b981';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.moveTo(135, 215);
+        ctx.lineTo(202, 138);
+        ctx.lineTo(256, 215);
+        ctx.closePath();
+        ctx.fillStyle = '#059669';
+        ctx.fill();
+
+        // Foreground wave bar
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath();
+        ctx.roundRect(78, 210, 164, 22, 11);
+        ctx.fill();
+
+        loadImageFromDataUrl(c.toDataURL('image/png'), false);
+        showToast('Loaded sample vector emblem!', 'info');
+      }
+
+      els.btnLoadSample.addEventListener('click', generateSampleImage);
+      els.btnSampleEmpty.addEventListener('click', generateSampleImage);
+
+      // =========================================================================
+      // 5. PURE NATIVE JS RASTER-TO-SVG VECTORIZATION ENGINE
+      // =========================================================================
+
+      function rgbToHex(r, g, b) {
+        return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+      }
+
+      function colorDistSq(r1, g1, b1, r2, g2, b2) {
+        const dr = r1 - r2;
+        const dg = g1 - g2;
+        const db = b1 - b2;
+        return dr * dr + dg * dg + db * db;
+      }
+
+      /**
+       * K-Means++ Color Quantization on opaque pixels
+       */
+      function quantizeImage(imageData, k) {
+        const { width, height, data } = imageData;
+        const totalPixels = width * height;
+        const opaqueSamples = [];
+
+        // Collect opaque pixels (subsample if huge for speed)
+        const stride = totalPixels > 80000 ? 4 : 1;
+        for (let i = 0; i < totalPixels; i += stride) {
+          const idx = i * 4;
+          if (data[idx + 3] >= 128) {
+            opaqueSamples.push([data[idx], data[idx + 1], data[idx + 2]]);
+          }
+        }
+
+        if (opaqueSamples.length === 0) {
+          return { palette: [], indexMap: new Int16Array(totalPixels).fill(-1) };
+        }
+
+        const effectiveK = Math.min(k, opaqueSamples.length);
+
+        // K-Means++ deterministic-ish initialization
+        const centroids = [];
+        centroids.push([...opaqueSamples[Math.floor(opaqueSamples.length / 2)]]);
+
+        const minDistances = new Float64Array(opaqueSamples.length);
+        for (let c = 1; c < effectiveK; c++) {
+          let sumDist = 0;
+          for (let i = 0; i < opaqueSamples.length; i++) {
+            const p = opaqueSamples[i];
+            let best = Infinity;
+            for (let j = 0; j < centroids.length; j++) {
+              const d = colorDistSq(p[0], p[1], p[2], centroids[j][0], centroids[j][1], centroids[j][2]);
+              if (d < best) best = d;
+            }
+            minDistances[i] = best;
+            sumDist += best;
+          }
+          if (sumDist === 0) {
+            centroids.push([...opaqueSamples[c % opaqueSamples.length]]);
+            continue;
+          }
+          let target = sumDist * 0.61803398875; // Golden ratio deterministic pick
+          let chosenIdx = 0;
+          for (let i = 0; i < opaqueSamples.length; i++) {
+            target -= minDistances[i];
+            if (target <= 0) {
+              chosenIdx = i;
+              break;
+            }
+          }
+          centroids.push([...opaqueSamples[chosenIdx]]);
+        }
+
+        // Run K-Means iterations (8 passes is plenty for clean graphic palettes)
+        const maxIters = 8;
+        for (let iter = 0; iter < maxIters; iter++) {
+          const sums = Array.from({ length: effectiveK }, () => [0, 0, 0, 0]);
+          for (let i = 0; i < opaqueSamples.length; i++) {
+            const p = opaqueSamples[i];
+            let bestIdx = 0;
+            let bestDist = Infinity;
+            for (let c = 0; c < effectiveK; c++) {
+              const d = colorDistSq(p[0], p[1], p[2], centroids[c][0], centroids[c][1], centroids[c][2]);
+              if (d < bestDist) {
+                bestDist = d;
+                bestIdx = c;
+              }
+            }
+            sums[bestIdx][0] += p[0];
+            sums[bestIdx][1] += p[1];
+            sums[bestIdx][2] += p[2];
+            sums[bestIdx][3] += 1;
+          }
+
+          let maxShift = 0;
+          for (let c = 0; c < effectiveK; c++) {
+            if (sums[c][3] > 0) {
+              const nr = Math.round(sums[c][0] / sums[c][3]);
+              const ng = Math.round(sums[c][1] / sums[c][3]);
+              const nb = Math.round(sums[c][2] / sums[c][3]);
+              const shift = colorDistSq(nr, ng, nb, centroids[c][0], centroids[c][1], centroids[c][2]);
+              if (shift > maxShift) maxShift = shift;
+              centroids[c] = [nr, ng, nb];
+            }
+          }
+          if (maxShift < 4) break;
+        }
+
+        // Deduplicate very close centroids
+        const uniquePalette = [];
+        for (let c = 0; c < centroids.length; c++) {
+          const cand = centroids[c];
+          const exists = uniquePalette.some((u) => colorDistSq(u[0], u[1], u[2], cand[0], cand[1], cand[2]) < 12);
+          if (!exists) uniquePalette.push(cand);
+        }
+
+        // Map every pixel in the full image to its nearest palette index (-1 = transparent)
+        const indexMap = new Int16Array(totalPixels);
+        const counts = new Uint32Array(uniquePalette.length);
+
+        for (let i = 0; i < totalPixels; i++) {
+          const idx = i * 4;
+          if (data[idx + 3] < 128) {
+            indexMap[i] = -1;
+            continue;
+          }
+          const r = data[idx], g = data[idx + 1], b = data[idx + 2];
+          let bestIdx = 0;
+          let bestDist = Infinity;
+          for (let c = 0; c < uniquePalette.length; c++) {
+            const u = uniquePalette[c];
+            const d = colorDistSq(r, g, b, u[0], u[1], u[2]);
+            if (d < bestDist) {
+              bestDist = d;
+              bestIdx = c;
+            }
+          }
+          indexMap[i] = bestIdx;
+          counts[bestIdx]++;
+        }
+
+        return { palette: uniquePalette, indexMap, counts };
+      }
+
+      /**
+       * Flood-fill outer border pixels matching corner color to remove background
+       */
+      function removeOuterBackground(indexMap, width, height) {
+        const corners = [
+          0,
+          width - 1,
+          (height - 1) * width,
+          height * width - 1
+        ];
+        // Pick most frequent non-transparent corner color
+        const freq = new Map();
+        for (const pos of corners) {
+          const col = indexMap[pos];
+          if (col !== -1) freq.set(col, (freq.get(col) || 0) + 1);
+        }
+        if (freq.size === 0) return;
+
+        let targetColor = -1;
+        let maxF = 0;
+        freq.forEach((count, col) => {
+          if (count > maxF) {
+            maxF = count;
+            targetColor = col;
+          }
+        });
+        if (targetColor === -1) return;
+
+        // BFS from all border pixels having targetColor
+        const visited = new Uint8Array(width * height);
+        const queue = new Int32Array(width * height);
+        let head = 0, tail = 0;
+
+        const enqueue = (x, y) => {
+          const p = y * width + x;
+          if (!visited[p] && indexMap[p] === targetColor) {
+            visited[p] = 1;
+            indexMap[p] = -1;
+            queue[tail++] = p;
+          }
+        };
+
+        for (let x = 0; x < width; x++) {
+          enqueue(x, 0);
+          enqueue(x, height - 1);
+        }
+        for (let y = 0; y < height; y++) {
+          enqueue(0, y);
+          enqueue(width - 1, y);
+        }
+
+        while (head < tail) {
+          const p = queue[head++];
+          const x = p % width;
+          const y = (p - x) / width;
+          if (x > 0) enqueue(x - 1, y);
+          if (x < width - 1) enqueue(x + 1, y);
+          if (y > 0) enqueue(x, y - 1);
+          if (y < height - 1) enqueue(x, y + 1);
+        }
+      }
+
+      /**
+       * Despeckle: filter out connected components smaller than minArea
+       */
+      function despeckleIndexMap(indexMap, width, height, minArea) {
+        if (minArea <= 1) return;
+        const visited = new Uint8Array(width * height);
+        const compBuffer = new Int32Array(width * height);
+
+        for (let i = 0; i < width * height; i++) {
+          const color = indexMap[i];
+          if (color === -1 || visited[i]) continue;
+
+          let head = 0, tail = 0;
+          visited[i] = 1;
+          compBuffer[tail++] = i;
+
+          while (head < tail) {
+            const p = compBuffer[head++];
+            const x = p % width;
+            const y = (p - x) / width;
+
+            if (x > 0) {
+              const np = p - 1;
+              if (!visited[np] && indexMap[np] === color) { visited[np] = 1; compBuffer[tail++] = np; }
+            }
+            if (x < width - 1) {
+              const np = p + 1;
+              if (!visited[np] && indexMap[np] === color) { visited[np] = 1; compBuffer[tail++] = np; }
+            }
+            if (y > 0) {
+              const np = p - width;
+              if (!visited[np] && indexMap[np] === color) { visited[np] = 1; compBuffer[tail++] = np; }
+            }
+            if (y < height - 1) {
+              const np = p + width;
+              if (!visited[np] && indexMap[np] === color) { visited[np] = 1; compBuffer[tail++] = np; }
+            }
+          }
+
+          if (tail < minArea) {
+            // Reassign tiny speck to nearest neighbor color or transparent
+            const first = compBuffer[0];
+            const fx = first % width;
+            const fy = (first - fx) / width;
+            let replacement = -1;
+            if (fx > 0 && indexMap[first - 1] !== color) replacement = indexMap[first - 1];
+            else if (fy > 0 && indexMap[first - width] !== color) replacement = indexMap[first - width];
+            else if (fx < width - 1 && indexMap[first + 1] !== color) replacement = indexMap[first + 1];
+            else if (fy < height - 1 && indexMap[first + width] !== color) replacement = indexMap[first + width];
+
+            for (let k = 0; k < tail; k++) {
+              indexMap[compBuffer[k]] = replacement;
+            }
+          }
+        }
+      }
+
+      /**
+       * Mode B: Crisp Pixel Block Vectorizer (Horizontal Run-Length Merged <rect>s)
+       */
+      function generatePixelBlockSvg(indexMap, palette, width, height) {
+        const groups = palette.map(() => []);
+
+        for (let y = 0; y < height; y++) {
+          let x = 0;
+          const rowOffset = y * width;
+          while (x < width) {
+            const colorIdx = indexMap[rowOffset + x];
+            if (colorIdx === -1) {
+              x++;
+              continue;
+            }
+            let runLen = 1;
+            while (x + runLen < width && indexMap[rowOffset + x + runLen] === colorIdx) {
+              runLen++;
+            }
+            groups[colorIdx].push(`<rect x="${x}" y="${y}" width="${runLen}" height="1"/>`);
+            x += runLen;
+          }
+        }
+
+        let elementCount = 0;
+        let body = '';
+        for (let c = 0; c < palette.length; c++) {
+          if (groups[c].length === 0) continue;
+          const hex = rgbToHex(palette[c][0], palette[c][1], palette[c][2]);
+          elementCount += groups[c].length;
+          body += `  <g fill="${hex}" shape-rendering="crispEdges">\n    ${groups[c].join('\n    ')}\n  </g>\n`;
+        }
+
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">\n${body}</svg>`;
+        return { svg, elementCount };
+      }
+
+      /**
+       * Douglas-Peucker Polyline Simplification (Closed Loop Safe)
+       */
+      function perpendicularDistance(pt, lineStart, lineEnd) {
+        let dx = lineEnd[0] - lineStart[0];
+        let dy = lineEnd[1] - lineStart[1];
+        const mag = Math.hypot(dx, dy);
+        if (mag > 0) {
+          dx /= mag;
+          dy /= mag;
+        }
+        const pvx = pt[0] - lineStart[0];
+        const pvy = pt[1] - lineStart[1];
+        const pvdot = dx * pvx + dy * pvy;
+        const ax = pvx - pvdot * dx;
+        const ay = pvy - pvdot * dy;
+        return Math.hypot(ax, ay);
+      }
+
+      function douglasPeucker(points, epsilon) {
+        if (points.length <= 2 || epsilon <= 0) return points;
+        let maxDist = 0;
+        let index = 0;
+        const end = points.length - 1;
+        for (let i = 1; i < end; i++) {
+          const d = perpendicularDistance(points[i], points[0], points[end]);
+          if (d > maxDist) {
+            index = i;
+            maxDist = d;
+          }
+        }
+        if (maxDist > epsilon) {
+          const left = douglasPeucker(points.slice(0, index + 1), epsilon);
+          const right = douglasPeucker(points.slice(index), epsilon);
+          return left.slice(0, -1).concat(right);
+        }
+        return [points[0], points[end]];
+      }
+
+      function simplifyClosedPolygon(pts, epsilon) {
+        if (pts.length < 4 || epsilon <= 0) return pts;
+        // Split closed ring into two halves at farthest vertex from index 0
+        let farIdx = Math.floor(pts.length / 2);
+        let maxD = -1;
+        for (let i = 1; i < pts.length; i++) {
+          const d = Math.hypot(pts[i][0] - pts[0][0], pts[i][1] - pts[0][1]);
+          if (d > maxD) {
+            maxD = d;
+            farIdx = i;
+          }
+        }
+        const half1 = douglasPeucker(pts.slice(0, farIdx + 1), epsilon);
+        const half2 = douglasPeucker(pts.slice(farIdx).concat([pts[0]]), epsilon);
+        const merged = half1.slice(0, -1).concat(half2.slice(0, -1));
+        return merged.length >= 3 ? merged : pts;
+      }
+
+      /**
+       * Convert simplified polygon points into an SVG path string (Linear or Quadratic Bezier)
+       */
+      function polygonToSvgPathD(pts, useCurves) {
+        const n = pts.length;
+        if (n < 3) return '';
+        const fmt = (v) => Number(v.toFixed(2));
+
+        if (!useCurves || n < 4) {
+          let d = `M${fmt(pts[0][0])} ${fmt(pts[0][1])}`;
+          for (let i = 1; i < n; i++) {
+            d += `L${fmt(pts[i][0])} ${fmt(pts[i][1])}`;
+          }
+          return d + 'Z';
+        }
+
+        // Midpoint-to-midpoint quadratic Bezier smoothing
+        const mid = (a, b) => [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5];
+        const startMid = mid(pts[n - 1], pts[0]);
+        let d = `M${fmt(startMid[0])} ${fmt(startMid[1])}`;
+        for (let i = 0; i < n; i++) {
+          const curr = pts[i];
+          const next = pts[(i + 1) % n];
+          const m = mid(curr, next);
+          d += `Q${fmt(curr[0])} ${fmt(curr[1])} ${fmt(m[0])} ${fmt(m[1])}`;
+        }
+        return d + 'Z';
+      }
+
+      /**
+       * Mode A: Boundary Edge Extraction + Loop Chaining + Simplification
+       * Extracts exact directed boundary half-edges for each color layer and chains them into closed contours.
+       */
+      function generateContourSvg(indexMap, palette, counts, width, height, epsilon, useCurves) {
+        // Sort colors by pixel count descending so larger background shapes sit underneath details
+        const colorOrder = palette
+          .map((_, idx) => idx)
+          .filter((idx) => counts[idx] > 0)
+          .sort((a, b) => counts[b] - counts[a]);
+
+        let pathCount = 0;
+        let svgBody = '';
+
+        // Helper to pack grid vertex (x, y) into a single integer key
+        const stride = width + 1;
+        const vKey = (x, y) => y * stride + x;
+
+        for (const colorIdx of colorOrder) {
+          // Collect all directed boundary edges around pixels of `colorIdx`
+          // Map from startVertexKey -> array of endVertexKeys
+          const adj = new Map();
+          const addEdge = (x1, y1, x2, y2) => {
+            const k1 = vKey(x1, y1);
+            const k2 = vKey(x2, y2);
+            let list = adj.get(k1);
+            if (!list) {
+              list = [];
+              adj.set(k1, list);
+            }
+            list.push(k2);
+          };
+
+          for (let y = 0; y < height; y++) {
+            const rowOff = y * width;
+            for (let x = 0; x < width; x++) {
+              if (indexMap[rowOff + x] !== colorIdx) continue;
+              // Top edge (clockwise around interior)
+              if (y === 0 || indexMap[rowOff - width + x] !== colorIdx) {
+                addEdge(x, y, x + 1, y);
+              }
+              // Right edge
+              if (x === width - 1 || indexMap[rowOff + x + 1] !== colorIdx) {
+                addEdge(x + 1, y, x + 1, y + 1);
+              }
+              // Bottom edge
+              if (y === height - 1 || indexMap[rowOff + width + x] !== colorIdx) {
+                addEdge(x + 1, y + 1, x, y + 1);
+              }
+              // Left edge
+              if (x === 0 || indexMap[rowOff + x - 1] !== colorIdx) {
+                addEdge(x, y + 1, x, y);
+              }
+            }
+          }
+
+          if (adj.size === 0) continue;
+
+          // Chain directed edges into closed polygon loops
+          const loopsD = [];
+          for (const [startKey, targets] of adj.entries()) {
+            while (targets.length > 0) {
+              const rawPoints = [];
+              let currKey = startKey;
+              let prevDir = null;
+
+              while (true) {
+                const nextList = adj.get(currKey);
+                if (!nextList || nextList.length === 0) break;
+
+                // If saddle vertex (2 outgoing edges), prefer turning right/continuing consistently
+                let nextKey;
+                if (nextList.length === 1 || !prevDir) {
+                  nextKey = nextList.pop();
+                } else {
+                  // Pick edge that makes a right turn relative to prevDir to keep contours tight
+                  const cx = currKey % stride;
+                  const cy = (currKey - cx) / stride;
+                  let chosenIdx = 0;
+                  for (let idx = 0; idx < nextList.length; idx++) {
+                    const nx = nextList[idx] % stride;
+                    const ny = (nextList[idx] - nx) / stride;
+                    const dx = nx - cx, dy = ny - cy;
+                    // Cross product prevDir x currDir > 0 means right turn in screen coords
+                    if (prevDir[0] * dy - prevDir[1] * dx > 0) {
+                      chosenIdx = idx;
+                      break;
+                    }
+                  }
+                  nextKey = nextList.splice(chosenIdx, 1)[0];
+                }
+
+                const cx = currKey % stride;
+                const cy = (currKey - cx) / stride;
+                const nx = nextKey % stride;
+                const ny = (nextKey - nx) / stride;
+                const dir = [nx - cx, ny - cy];
+
+                // Merge collinear grid steps on the fly
+                if (!prevDir || prevDir[0] !== dir[0] || prevDir[1] !== dir[1]) {
+                  rawPoints.push([cx, cy]);
+                }
+                prevDir = dir;
+                currKey = nextKey;
+
+                if (currKey === startKey) break;
+              }
+
+              if (rawPoints.length >= 3) {
+                const simplified = simplifyClosedPolygon(rawPoints, epsilon);
+                const d = polygonToSvgPathD(simplified, useCurves);
+                if (d) loopsD.push(d);
+              }
+            }
+          }
+
+          if (loopsD.length > 0) {
+            const hex = rgbToHex(palette[colorIdx][0], palette[colorIdx][1], palette[colorIdx][2]);
+            // Using fill-rule="evenodd" automatically cuts out inner holes cleanly!
+            svgBody += `  <path fill="${hex}" fill-rule="evenodd" d="${loopsD.join(' ')}"/>\n`;
+            pathCount += loopsD.length;
+          }
+        }
+
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">\n${svgBody}</svg>`;
+        return { svg, elementCount: pathCount };
+      }
+
+      /**
+       * Main Vectorization Pipeline Runner
+       */
+      function runVectorization() {
+        if (!currentImage) return;
+        els.processingSpinner.classList.remove('hidden');
+
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            try {
+              const origW = currentImage.naturalWidth || currentImage.width;
+              const origH = currentImage.naturalHeight || currentImage.height;
+              const maxDim = Number(settings.maxDim) || 400;
+
+              let targetW = origW;
+              let targetH = origH;
+              if (Math.max(origW, origH) > maxDim) {
+                const ratio = maxDim / Math.max(origW, origH);
+                targetW = Math.max(1, Math.round(origW * ratio));
+                targetH = Math.max(1, Math.round(origH * ratio));
+              }
+
+              const canvas = els.workCanvas;
+              canvas.width = targetW;
+              canvas.height = targetH;
+              const ctx = canvas.getContext('2d', { willReadFrequently: true });
+              ctx.clearRect(0, 0, targetW, targetH);
+              ctx.imageSmoothingEnabled = settings.mode === 'contour';
+              ctx.drawImage(currentImage, 0, 0, targetW, targetH);
+
+              const imgData = ctx.getImageData(0, 0, targetW, targetH);
+              const { palette, indexMap, counts } = quantizeImage(imgData, Number(settings.colors));
+
+              // Render palette swatches in sidebar
+              renderPaletteSwatches(palette);
+
+              if (settings.removeBg) {
+                removeOuterBackground(indexMap, targetW, targetH);
+              }
+
+              if (Number(settings.minArea) > 1) {
+                despeckleIndexMap(indexMap, targetW, targetH, Number(settings.minArea));
+              }
+
+              let result;
+              if (settings.mode === 'pixel') {
+                result = generatePixelBlockSvg(indexMap, palette, targetW, targetH);
+              } else {
+                result = generateContourSvg(
+                  indexMap,
+                  palette,
+                  counts,
+                  targetW,
+                  targetH,
+                  Number(settings.smoothness),
+                  Boolean(settings.curves)
+                );
+              }
+
+              currentSvgString = result.svg;
+              renderSvgPreview(currentSvgString);
+              updateStats(origW, origH, result.elementCount, currentSvgString.length);
+            } catch (err) {
+              console.error(err);
+              showToast('Error vectorizing image.', 'error');
+            } finally {
+              els.processingSpinner.classList.add('hidden');
+            }
+          }, 16);
+        });
+      }
+
+      function triggerVectorization() {
+        clearTimeout(renderDebounceTimer);
+        renderDebounceTimer = setTimeout(runVectorization, 60);
+      }
+
+      function renderPaletteSwatches(palette) {
+        els.paletteSwatches.innerHTML = '';
+        palette.forEach((rgb) => {
+          const hex = rgbToHex(rgb[0], rgb[1], rgb[2]);
+          const swatch = document.createElement('span');
+          swatch.className = 'w-4 h-4 rounded-sm border border-black/15 dark:border-white/15 shadow-xs';
+          swatch.style.backgroundColor = hex;
+          swatch.title = hex.toUpperCase();
+          els.paletteSwatches.appendChild(swatch);
+        });
+      }
+
+      function renderSvgPreview(svgMarkup) {
+        els.svgOutputContainer.innerHTML = svgMarkup;
+        const svgEl = els.svgOutputContainer.querySelector('svg');
+        if (svgEl) {
+          svgEl.style.width = '100%';
+          svgEl.style.height = '100%';
+          svgEl.style.maxWidth = '100%';
+          svgEl.style.maxHeight = '100%';
+        }
+        if (!els.codeDrawer.classList.contains('hidden')) {
+          els.svgCodeEditor.value = svgMarkup;
+        }
+      }
+
+      function updateStats(w, h, count, byteLen) {
+        els.statDim.textContent = `${w} × ${h} px`;
+        els.statNodes.textContent = `${count.toLocaleString()} ${settings.mode === 'pixel' ? 'rects' : 'paths'}`;
+        const kb = (byteLen / 1024).toFixed(1);
+        els.statSize.textContent = `${kb} KB`;
+      }
+
+      // =========================================================================
+      // 6. INTERACTIVE CONTROLS & LISTENERS
+      // =========================================================================
+      els.modeButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          settings.mode = btn.dataset.mode;
+          syncControlsWithSettings();
+          saveSettings();
+          triggerVectorization();
+        });
+      });
+
+      els.sliderColors.addEventListener('input', (e) => {
+        settings.colors = Number(e.target.value);
+        els.valColors.textContent = settings.colors;
+        saveSettings();
+        triggerVectorization();
+      });
+
+      els.sliderSmooth.addEventListener('input', (e) => {
+        settings.smoothness = Number(e.target.value);
+        els.valSmooth.textContent = `${settings.smoothness.toFixed(2).replace(/\.00$/, '')} px`;
+        saveSettings();
+        triggerVectorization();
+      });
+
+      els.checkCurves.addEventListener('change', (e) => {
+        settings.curves = e.target.checked;
+        saveSettings();
+        triggerVectorization();
+      });
+
+      els.sliderNoise.addEventListener('input', (e) => {
+        settings.minArea = Number(e.target.value);
+        els.valNoise.textContent = `${settings.minArea} px`;
+        saveSettings();
+        triggerVectorization();
+      });
+
+      els.checkRemoveBg.addEventListener('change', (e) => {
+        settings.removeBg = e.target.checked;
+        saveSettings();
+        triggerVectorization();
+      });
+
+      els.selectMaxDim.addEventListener('change', (e) => {
+        settings.maxDim = Number(e.target.value);
+        saveSettings();
+        triggerVectorization();
+      });
+
+      els.btnResetSettings.addEventListener('click', () => {
+        const currentTheme = settings.theme;
+        settings = { ...DEFAULT_SETTINGS, theme: currentTheme };
+        syncControlsWithSettings();
+        saveSettings();
+        triggerVectorization();
+        showToast('Settings reset to defaults', 'info');
+      });
+
+      els.btnThemeToggle.addEventListener('click', () => {
+        settings.theme = settings.theme === 'dark' ? 'light' : 'dark';
+        applyTheme(settings.theme);
+        saveSettings();
+      });
+
+      // =========================================================================
+      // 7. ZOOM, PAN & STAGE INSPECTION CONTROLS
+      // =========================================================================
+      function applyTransform() {
+        const t = `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`;
+        els.originalPreviewImg.style.transform = t;
+        els.svgOutputContainer.style.transform = t;
+        els.zoomLabel.textContent = `${Math.round(transform.scale * 100)}%`;
+      }
+
+      function resetZoomAndPan() {
+        transform = { scale: 1, x: 0, y: 0 };
+        applyTransform();
+      }
+
+      els.btnZoomIn.addEventListener('click', () => {
+        transform.scale = Math.min(8, +(transform.scale * 1.25).toFixed(2));
+        applyTransform();
+      });
+
+      els.btnZoomOut.addEventListener('click', () => {
+        transform.scale = Math.max(0.25, +(transform.scale / 1.25).toFixed(2));
+        applyTransform();
+      });
+
+      els.btnZoomReset.addEventListener('click', resetZoomAndPan);
+
+      // Mouse Wheel Zoom on viewports
+      [els.originalViewport, els.svgViewport].forEach((vp) => {
+        vp.addEventListener('wheel', (e) => {
+          if (!currentImage) return;
+          e.preventDefault();
+          const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+          transform.scale = Math.min(8, Math.max(0.25, transform.scale * factor));
+          applyTransform();
+        }, { passive: false });
+
+        vp.addEventListener('mousedown', (e) => {
+          if (!currentImage || e.button !== 0) return;
+          isPanning = true;
+          panStart = { x: e.clientX - transform.x, y: e.clientY - transform.y };
+        });
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isPanning) return;
+        transform.x = e.clientX - panStart.x;
+        transform.y = e.clientY - panStart.y;
+        applyTransform();
+      });
+
+      window.addEventListener('mouseup', () => {
+        isPanning = false;
+      });
+
+      // View Tabs (Split / SVG Only / Original)
+      els.viewTabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          currentViewMode = tab.dataset.view;
+          els.viewTabs.forEach((t) => {
+            if (t.dataset.view === currentViewMode) {
+              t.className = 'view-tab px-2.5 py-1 rounded-md text-xs font-medium bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm transition';
+            } else {
+              t.className = 'view-tab px-2.5 py-1 rounded-md text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition';
+            }
+          });
+
+          if (currentViewMode === 'split') {
+            els.previewWorkspace.classList.remove('md:grid-cols-1');
+            els.previewWorkspace.classList.add('md:grid-cols-2');
+            els.paneOriginal.classList.remove('hidden');
+            els.paneVector.classList.remove('hidden');
+          } else if (currentViewMode === 'vector') {
+            els.previewWorkspace.classList.remove('md:grid-cols-2');
+            els.previewWorkspace.classList.add('md:grid-cols-1');
+            els.paneOriginal.classList.add('hidden');
+            els.paneVector.classList.remove('hidden');
+          } else {
+            els.previewWorkspace.classList.remove('md:grid-cols-2');
+            els.previewWorkspace.classList.add('md:grid-cols-1');
+            els.paneOriginal.classList.remove('hidden');
+            els.paneVector.classList.add('hidden');
+          }
+        });
+      });
+
+      // Wireframe Outline Toggle
+      els.btnWireframe.addEventListener('click', () => {
+        wireframeActive = !wireframeActive;
+        els.svgOutputContainer.classList.toggle('wireframe-mode', wireframeActive);
+        els.btnWireframe.classList.toggle('bg-brand-500/15', wireframeActive);
+        els.btnWireframe.classList.toggle('border-brand-500', wireframeActive);
+        els.btnWireframe.classList.toggle('text-brand-600', wireframeActive);
+        els.btnWireframe.classList.toggle('dark:text-brand-400', wireframeActive);
+      });
+
+      // Checkerboard Background Toggle
+      els.btnGridToggle.addEventListener('click', () => {
+        showCheckerboard = !showCheckerboard;
+        els.paneOriginal.classList.toggle('checkerboard', showCheckerboard);
+        els.paneVector.classList.toggle('checkerboard', showCheckerboard);
+        els.btnGridToggle.classList.toggle('bg-brand-500/10', showCheckerboard);
+        els.btnGridToggle.classList.toggle('border-brand-500/30', showCheckerboard);
+        els.btnGridToggle.classList.toggle('text-brand-600', showCheckerboard);
+      });
+
+      // =========================================================================
+      // 8. EXPORT, CODE VIEWER & RECENT HISTORY PERSISTENCE
+      // =========================================================================
+      els.btnDownloadSvg.addEventListener('click', () => {
+        if (!currentSvgString) return;
+        const blob = new Blob([currentSvgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `vectorforge-${Date.now()}.svg`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Downloaded .SVG file!');
+      });
+
+      els.btnCopySvg.addEventListener('click', () => {
+        if (!currentSvgString) return;
+        // Reliable clipboard copy compatible with both standalone & iframe contexts
+        const textarea = document.createElement('textarea');
+        textarea.value = currentSvgString;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand('copy');
+          showToast('SVG markup copied to clipboard!');
+        } catch (err) {
+          showToast('Could not copy SVG code.', 'error');
+        }
+        document.body.removeChild(textarea);
+      });
+
+      els.btnToggleCode.addEventListener('click', () => {
+        const isHidden = els.codeDrawer.classList.contains('hidden');
+        if (isHidden) {
+          els.codeDrawer.classList.remove('hidden');
+          els.svgCodeEditor.value = currentSvgString;
+        } else {
+          els.codeDrawer.classList.add('hidden');
+        }
+      });
+
+      els.btnCloseCode.addEventListener('click', () => {
+        els.codeDrawer.classList.add('hidden');
+      });
+
+      els.svgCodeEditor.addEventListener('input', (e) => {
+        currentSvgString = e.target.value;
+        els.svgOutputContainer.innerHTML = currentSvgString;
+        const svgEl = els.svgOutputContainer.querySelector('svg');
+        if (svgEl) {
+          svgEl.style.width = '100%';
+          svgEl.style.height = '100%';
+        }
+      });
+
+      els.btnFormatCode.addEventListener('click', () => {
+        if (!currentSvgString) return;
+        const formatted = currentSvgString
+          .replace(/>\s*</g, '>\n<')
+          .replace(/(<path|<rect|<g)/g, '  $1')
+          .replace(/  <\/g>/g, '  </g>');
+        els.svgCodeEditor.value = formatted;
+        currentSvgString = formatted;
+      });
+
+      // Thumbnail History Management (persisted via StorageAdapter)
+      function createThumbnailDataUrl(dataUrl) {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => {
+            const c = document.createElement('canvas');
+            const maxS = 96;
+            const scale = Math.min(1, maxS / Math.max(img.width, img.height));
+            c.width = Math.max(1, Math.round(img.width * scale));
+            c.height = Math.max(1, Math.round(img.height * scale));
+            const ctx = c.getContext('2d');
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            resolve(c.toDataURL('image/webp', 0.75));
+          };
+          img.onerror = () => resolve(null);
+          img.src = dataUrl;
+        });
+      }
+
+      async function saveToHistory(dataUrl) {
+        const thumb = await createThumbnailDataUrl(dataUrl);
+        if (!thumb) return;
+        // Avoid duplicate consecutive thumbnails
+        historyItems = historyItems.filter((item) => item !== thumb);
+        historyItems.unshift(thumb);
+        if (historyItems.length > 4) historyItems = historyItems.slice(0, 4);
+        await StorageAdapter.set('vf_history_v1', historyItems);
+        renderHistoryList();
+      }
+
+      function renderHistoryList() {
+        if (!historyItems || historyItems.length === 0) {
+          els.historySection.classList.add('hidden');
+          return;
+        }
+        els.historySection.classList.remove('hidden');
+        els.historyList.innerHTML = '';
+        historyItems.forEach((thumbUrl) => {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.title = 'Reload recent image';
+          btn.className = 'aspect-square rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden checkerboard hover:border-brand-500 transition p-1';
+          const img = document.createElement('img');
+          img.src = thumbUrl;
+          img.alt = 'Recent input';
+          img.className = 'w-full h-full object-contain';
+          btn.appendChild(img);
+          btn.addEventListener('click', () => {
+            loadImageFromDataUrl(thumbUrl, false);
+          });
+          els.historyList.appendChild(btn);
+        });
+      }
+
+      els.btnClearHistory.addEventListener('click', async () => {
+        historyItems = [];
+        await StorageAdapter.set('vf_history_v1', []);
+        renderHistoryList();
+      });
+
+      // =========================================================================
+      // 9. INITIALIZATION BOOTSTRAP
+      // =========================================================================
+      async function init() {
+        const savedSettings = await StorageAdapter.get('vf_settings_v1', null);
+        if (savedSettings) {
+          settings = { ...DEFAULT_SETTINGS, ...savedSettings };
+        }
+        applyTheme(settings.theme);
+        syncControlsWithSettings();
+
+        const savedHistory = await StorageAdapter.get('vf_history_v1', []);
+        if (Array.isArray(savedHistory)) {
+          historyItems = savedHistory;
+          renderHistoryList();
+        }
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
